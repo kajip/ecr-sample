@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Sample Create Docker Image on AWS
+
+Parameters:
+  # プロジェクト名
+  ProjectName:
+    Type: String
+    Default: ecr-sample
+
+  # CodeBuildサービスロール名
+  CodeBuildServiceRole:
+    Type: String
+    Default: codebuild-role
+
+Resources:
+  # CodeCommitの設定
+  CodeCommitRepositoryEcrSample:
+    Type: "AWS::CodeCommit::Repository"
+    Properties:
+      RepositoryName: !Ref ProjectName
+
+  # ElasticContainerRepositoryの設定
+  EcrRepositoryEcrSample:
+    Type: "AWS::ECR::Repository"
+    Properties:
+      RepositoryName: !Ref ProjectName
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: CodeBuildAccess
+            Effect: Allow
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+          -
+            Sid: CodeBuildRoleAccess
+            Effect: Allow
+            Principal:
+              AWS:
+                -
+                  !Join
+                    - ':'
+                    - - arn
+                      - aws
+                      - iam
+                      - ''
+                      - !Ref AWS::AccountId
+                      -
+                        !Join
+                          - '/'
+                          - - role
+                            - !Ref CodeBuildServiceRole
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+
+  # CodeBuildイメージ
+  CodeBuildEcrSample:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: !Ref ProjectName
+      Description: Build Docker Image on AWS Sample
+      ServiceRole:
+        !Join
+          - ':'
+          - - arn
+            - aws
+            - iam
+            - ''
+            - !Ref AWS::AccountId
+            -
+              !Join
+                - '/'
+                - - role
+                  - !Ref CodeBuildServiceRole
+      Source:
+        Type: CODECOMMIT
+        Location: !GetAtt CodeCommitRepositoryEcrSample.CloneUrlHttp
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/docker:1.12.1
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: IMAGE_REPO_NAME
+            Value: !Ref EcrRepositoryEcrSample
+          - Name: ECR_REPOSITORY_HOSTNAME
+            Value:
+              !Join
+                - '.'
+                - - !Ref AWS::AccountId
+                  - dkr
+                  - ecr
+                  - !Ref AWS::Region
+                  - amazonaws
+                  - com
+
+          - Name: IMAGE_TAG
+            Value: latest
+
+      TimeoutInMinutes: 60
